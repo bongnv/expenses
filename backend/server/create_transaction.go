@@ -42,29 +42,48 @@ func (s *Server) createTransaction(ctx context.Context, gwfReq gwf.Request) (int
 	// get latest ledger
 	switch req.Type {
 	case storage.TTExpense:
-		var record storage.Ledger
-		result := s.db.Where("account_id = ?", req.FromAccountID).Order("version desc").First(&record)
-		if result.Error == gorm.ErrRecordNotFound {
-			result = s.db.Save(&storage.Ledger{
-				AccountID:   req.FromAccountID,
-				Version:     1,
-				Balance:     -req.Amount,
-				SubCategory: req.SubCategory,
-				Amount:      -req.Amount,
-				TxTime:      req.TxTime,
-			})
-			if result.Error != nil {
-				s.logger.Println("Error while saving records to ledger", result.Error)
-				return nil, result.Error
-			}
-		}
-
-		if result.Error != nil {
-			s.logger.Println("Error while finding records from the Ledger", result.Error)
-			return nil, result.Error
-		}
+		return s.createExpense(ctx, req)
 	default:
 		return nil, errors.New("unsupported type")
 	}
+}
+
+func (s *Server) createExpense(ctx context.Context, req *CreateTransactionRequest) (interface{}, error) {
+	var record storage.Ledger
+	result := s.db.WithContext(ctx).Where("account_id = ?", req.FromAccountID).Order("version desc").First(&record)
+	if result.Error == gorm.ErrRecordNotFound {
+		result = s.db.WithContext(ctx).Save(&storage.Ledger{
+			AccountID:   req.FromAccountID,
+			Version:     1,
+			Balance:     -req.Amount,
+			SubCategory: req.SubCategory,
+			Amount:      -req.Amount,
+			TxTime:      req.TxTime,
+		})
+		if result.Error != nil {
+			s.logger.Println("Error while saving records to ledger", result.Error)
+			return nil, result.Error
+		}
+	}
+
+	if result.Error != nil {
+		s.logger.Println("Error while finding records from the Ledger", result.Error)
+		return nil, result.Error
+	}
+
+	result = s.db.WithContext(ctx).Save(&storage.Ledger{
+		AccountID:   record.AccountID,
+		Version:     record.Version + 1,
+		Balance:     record.Balance - req.Amount,
+		SubCategory: req.SubCategory,
+		Amount:      -req.Amount,
+		TxTime:      req.TxTime,
+	})
+
+	if result.Error != nil {
+		s.logger.Println("Error while saving records to ledger", result.Error)
+		return nil, result.Error
+	}
+
 	return nil, nil
 }
