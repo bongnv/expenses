@@ -1,6 +1,8 @@
 package storage
 
 import (
+	"encoding/json"
+	"errors"
 	"time"
 
 	"gorm.io/driver/mysql"
@@ -31,6 +33,40 @@ const (
 	TTInvestment
 )
 
+var (
+	transactionTypeMap = map[TransactionType]string{
+		TTExpense:    "EXPENSE",
+		TTIncome:     "INCOME",
+		TTTransfer:   "TRANSFER",
+		TTInvestment: "INVESTMENT",
+	}
+)
+
+func (t TransactionType) String() string {
+	if v, ok := transactionTypeMap[t]; ok {
+		return v
+	}
+
+	return "UNKNOWN"
+}
+
+func (t *TransactionType) UnmarshalJSON(data []byte) error {
+	var val string
+	err := json.Unmarshal(data, &val)
+	if err != nil {
+		return err
+	}
+
+	for k, v := range transactionTypeMap {
+		if v == val {
+			*t = k
+			return nil
+		}
+	}
+
+	return errors.New("invalid value")
+}
+
 // Account ...
 type Account struct {
 	ID   uint        `gorm:"primaryKey"`
@@ -59,7 +95,7 @@ type Ledger struct {
 
 // Init initializes DB connections..
 func Init() (*gorm.DB, error) {
-	db, err := gorm.Open(mysql.Open("root:secret@tcp(127.0.0.1:3306)/expenses"), &gorm.Config{})
+	db, err := gorm.Open(mysql.Open("root:secret@tcp(127.0.0.1:3306)/expenses?parseTime=True"), &gorm.Config{})
 	if err != nil {
 		return nil, err
 	}
